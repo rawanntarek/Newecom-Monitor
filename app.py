@@ -16,11 +16,9 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-
 # University API URLs
 LOGIN_URL = "http://newecom.fci.cu.edu.eg/api/authenticate"
 GRADES_URL = f"http://newecom.fci.cu.edu.eg/api/student-courses?size=150&studentId.equals={STUDENT_ID}&includeWithdraw.equals=true"
-
 
 
 def login():
@@ -35,6 +33,7 @@ def login():
     else:
         print("[❌] Login failed!")
         return None
+
 
 def get_grades(token):
     """Fetches the current grades using the authentication token."""
@@ -55,6 +54,7 @@ def get_grades(token):
         print("[❌] Failed to fetch grades!")
         return None
 
+
 def send_email(subject, message):
     """Sends an email notification when grades are updated."""
     msg = MIMEText(message)
@@ -68,18 +68,20 @@ def send_email(subject, message):
 
     print("[✅] Email sent!")
 
+
 def check_for_updates():
     """Continuously monitors for new grades and sends notifications."""
     token = login()
     if not token:
         return
-    
+
+    # Load old grades from the environment variable
+    grades_env = os.environ.get("OLD_GRADES", "{}")  
     try:
-        with open("grades.json", "r") as file:
-            old_grades = json.load(file)
-    except FileNotFoundError:
+        old_grades = json.loads(grades_env)
+    except json.JSONDecodeError:
         old_grades = {}
-    
+
     while True:
         new_grades = get_grades(token)
         if not new_grades:
@@ -93,15 +95,16 @@ def check_for_updates():
                 break
 
         if updated:
-            message = "📢 Your grades have been updated!\n\n"            
+            message = "📢 Your grades have been updated!\n\n"
             send_email("Your Grades Have Been Updated!", message)
-            
-            with open("grades.json", "w") as file:
-                json.dump(new_grades, file)
+
+            # Store the new grades in the environment variable
+            os.environ["OLD_GRADES"] = json.dumps(new_grades)
         else:
             print("[ℹ️] No new updates.")
         
-        time.sleep(60)  # Check every 5 minutes
+        time.sleep(60)  # Check every minute
+
 
 if __name__ == "__main__":
     check_for_updates()
