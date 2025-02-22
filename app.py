@@ -46,17 +46,6 @@ def login():
         return None
 
 
-def get_grades(token):
-    """Fetches the current grades using the authentication token."""
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(GRADES_URL, headers=headers)
-
-    if response.status_code == 200:
-        courses = response.json()
-        return {course["course"]["name"]: course.get("grade") for course in courses}
-    else:
-        print("[❌] Failed to fetch grades!")
-        return None
 
 
 def send_email(subject, message):
@@ -71,30 +60,6 @@ def send_email(subject, message):
         server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
 
     print("[✅] Email sent:", subject)
-
-
-def check_for_updates(token):
-    """Continuously monitors grades and sends an email if any target course has a grade."""
-    while True:
-        new_grades = get_grades(token)
-        if not new_grades:
-            time.sleep(30)
-            continue
-
-        message = "📢 Your grades have been updated!\n\n"
-        found = False
-
-        for course in TARGET_COURSES:
-            grade = new_grades.get(course)
-            if grade is not None:
-                message += f"grades updated"
-                found = True
-
-        if found:
-            send_email("Your Grades Have Been Updated!", message)
-
-        print("[ℹ️] No new grade updates. Checking again in 1 minute...")
-        time.sleep(30)  # Check every 30 seconds
 
 
 def check_registration_status(token):
@@ -126,7 +91,6 @@ if __name__ == "__main__":
     if token:
         # Run both checks in parallel
         threading.Thread(target=check_registration_status, args=(token,), daemon=True).start()
-        threading.Thread(target=check_for_updates, args=(token,), daemon=True).start()
 
         # Keep the main thread alive
         while True:
