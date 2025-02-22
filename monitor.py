@@ -9,12 +9,12 @@ import os
 # Load environment variables
 load_dotenv()
 
-USERNAME = os.getenv("ACC_USERNAME")
-PASSWORD = os.getenv("PASSWORD")
-STUDENT_ID = os.getenv("STUDENT_ID")
-SENDER_EMAIL = os.getenv("SENDER_EMAIL")
-APP_PASSWORD = os.getenv("APP_PASSWORD")
-RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
+USERNAME = os.environ.get("ACC_USERNAME")
+PASSWORD = os.environ.get("PASSWORD")
+STUDENT_ID = os.environ.get("STUDENT_ID")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
+RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
 
 # University API URLs
