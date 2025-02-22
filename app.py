@@ -42,7 +42,6 @@ def get_grades(token):
 
     if response.status_code == 200:
         courses = response.json()
-        print("[ℹ️] API Response:", json.dumps(courses, indent=2))  # Debugging line
         
         try:
             grades = {course["course"]["name"]: course.get("grade") for course in courses}
