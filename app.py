@@ -3,6 +3,7 @@ import json
 import smtplib
 from email.mime.text import MIMEText
 import time
+import threading
 from dotenv import load_dotenv
 import os
 
@@ -16,16 +17,26 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL")
 
-# University API URLs
+# API URLs
+REGISTRATION_URL = f"http://newecom.fci.cu.edu.eg/api/student-registration-courses?studentId={STUDENT_ID}"
 LOGIN_URL = "http://newecom.fci.cu.edu.eg/api/authenticate"
 GRADES_URL = f"http://newecom.fci.cu.edu.eg/api/student-courses?size=150&studentId.equals={STUDENT_ID}&includeWithdraw.equals=true"
+
+# Courses to track
+TARGET_COURSES = {
+    "Soft Computing",
+    "Cloud Computing",
+    "Selected Topics in Software Engineering-1",
+    "Web Engineering",
+    "Selected Labs in Software Engineering",
+}
 
 
 def login():
     """Logs into the university system and returns an authentication token."""
     data = {"username": USERNAME, "password": PASSWORD}
     response = requests.post(LOGIN_URL, json=data)
-    
+
     if response.status_code == 200:
         token = response.json().get("id_token")
         print("[✅] Login successful!")
@@ -42,20 +53,14 @@ def get_grades(token):
 
     if response.status_code == 200:
         courses = response.json()
-        
-        try:
-            grades = {course["course"]["name"]: course.get("grade") for course in courses}
-            return grades
-        except (KeyError, TypeError):
-            print("[❌] Unexpected response format!")
-            return None
+        return {course["course"]["name"]: course.get("grade") for course in courses}
     else:
         print("[❌] Failed to fetch grades!")
         return None
 
 
 def send_email(subject, message):
-    """Sends an email notification when grades are updated."""
+    """Sends an email notification."""
     msg = MIMEText(message)
     msg["Subject"] = subject
     msg["From"] = SENDER_EMAIL
@@ -65,45 +70,64 @@ def send_email(subject, message):
         server.login(SENDER_EMAIL, APP_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
 
-    print("[✅] Email sent!")
+    print("[✅] Email sent:", subject)
 
 
-def check_for_updates():
-    """Continuously monitors for new grades and sends notifications."""
-    token = login()
-    if not token:
-        return
-
-    # Load old grades from the environment variable
-    grades_env = os.environ.get("OLD_GRADES", "{}")  
-    try:
-        old_grades = json.loads(grades_env)
-    except json.JSONDecodeError:
-        old_grades = {}
-
+def check_for_updates(token):
+    """Continuously monitors grades and sends an email if any target course has a grade."""
     while True:
         new_grades = get_grades(token)
         if not new_grades:
-            return
+            time.sleep(30)
+            continue
 
-        updated = False
-        for course, grade in new_grades.items():
-            old_grade = old_grades.get(course)
-            if old_grade is None and grade is not None:  # Check if a grade changed from None to a value
-                updated = True
-                break
+        message = "📢 Your grades have been updated!\n\n"
+        found = False
 
-        if updated:
-            message = "📢 Your grades have been updated!\n\n"
+        for course in TARGET_COURSES:
+            grade = new_grades.get(course)
+            if grade is not None:
+                message += f"grades updated"
+                found = True
+
+        if found:
             send_email("Your Grades Have Been Updated!", message)
 
-            # Store the new grades in the environment variable
-            os.environ["OLD_GRADES"] = json.dumps(new_grades)
+        print("[ℹ️] No new grade updates. Checking again in 1 minute...")
+        time.sleep(30)  # Check every 30 seconds
+
+
+def check_registration_status(token):
+    """Continuously checks if registration is open and sends an email once."""
+    headers = {"Authorization": f"Bearer {token}"}
+    already_notified = False  # Track if an email was already sent
+
+    while True:
+        response = requests.get(REGISTRATION_URL, headers=headers)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            if data.get('responseCode') != -1 and not already_notified:  # Registration is open
+                print("[🚀] Registration is NOW OPEN! Hurry up!")
+                send_email("📢 Registration Open!", "🚀 Registration is NOW OPEN! Hurry up!")
+                already_notified = True  # Avoid duplicate emails
+            elif data.get('responseCode') == -1:
+                print("[ℹ️] Registration is still closed.")
+
         else:
-            print("[ℹ️] No new updates.")
-        
-        time.sleep(60)  # Check every minute
+            print("[❌] Failed to fetch registration status!")
+
+        time.sleep(30)  # Check every 30 seconds
 
 
 if __name__ == "__main__":
-    check_for_updates()
+    token = login()
+    if token:
+        # Run both checks in parallel
+        threading.Thread(target=check_registration_status, args=(token,), daemon=True).start()
+        threading.Thread(target=check_for_updates, args=(token,), daemon=True).start()
+
+        # Keep the main thread alive
+        while True:
+            time.sleep(1)
